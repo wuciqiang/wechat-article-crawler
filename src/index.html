@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微信公众号文章抓取工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 左侧：公众号管理 -->
+    <div class="sidebar">
+      <div class="header">
+        <h2>公众号管理</h2>
+        <div class="header-actions">
+          <div id="login-status" class="login-status">
+            <span id="login-status-text" class="not-logged-in">未登录</span>
+            <button id="btn-login" class="btn-login">登录</button>
+            <button id="btn-logout" class="btn-logout" style="display:none;">退出登录</button>
+          </div>
+          <button id="btn-settings">设置</button>
+        </div>
+      </div>
+      
+      <!-- 添加公众号 -->
+      <div class="account-add">
+        <input type="text" id="account-name" placeholder="输入公众号名称">
+        <button id="btn-add-account">添加</button>
+      </div>
+      
+      <!-- 公众号列表 -->
+      <div class="account-list">
+        <h3>公众号列表</h3>
+        <ul id="accounts"></ul>
+      </div>
+    </div>
+    
+    <!-- 右侧：文章列表和内容 -->
+    <div class="main-content">
+      <div class="articles-view" id="articles-view">
+        <div class="articles-header">
+          <h2 id="current-account-name">请选择公众号</h2>
+          <div class="actions">
+            <span id="progress-info">未开始获取</span>
+            <div class="sort-controls">
+              <label for="sort-order">排序方式：</label>
+              <select id="sort-order">
+                <option value="desc">时间倒序（新→旧）</option>
+                <option value="asc">时间升序（旧→新）</option>
+              </select>
+            </div>
+            <button id="btn-export">导出Excel</button>
+          </div>
+        </div>
+        
+        <div class="articles-list">
+          <table id="articles-table">
+            <thead>
+              <tr>
+                <th width="40%">标题</th>
+                <th width="15%">作者</th>
+                <th width="15%">发布日期</th>
+                <th width="30%">摘要</th>
+              </tr>
+            </thead>
+            <tbody id="articles-data"></tbody>
+          </table>
+        </div>
+        
+        <div class="pagination">
+          <button id="btn-load-more" disabled>加载更多</button>
+        </div>
+      </div>
+      
+      <!-- 文章详情视图 -->
+      <div id="article-detail-view" class="detail-view">
+        <div class="article-header">
+          <div class="article-actions">
+            <button id="btn-back" class="btn-back">← 返回列表</button>
+          </div>
+          <div class="article-meta">
+            <h2 id="article-title"></h2>
+            <div class="article-info">
+              <span id="article-author"></span>
+              <span id="article-date"></span>
+            </div>
+          </div>
+        </div>
+        <div class="article-content">
+          <!-- 使用iframe替代webview以获得更好的兼容性 -->
+          <iframe id="article-frame" frameborder="0"></iframe>
+          <!-- 加载指示器 -->
+          <div id="loading-indicator" class="loading-indicator">
+            <div class="spinner"></div>
+            <p>正在加载文章...</p>
+          </div>
+          <!-- 错误信息展示 -->
+          <div id="error-container" class="error-container" style="display:none;">
+            <h3>无法加载文章</h3>
+            <p id="error-message">加载出错，请稍后再试</p>
+            <div id="error-details" class="error-details"></div>
+          </div>
+          <!-- 浮动返回按钮 -->
+          <button id="btn-back-float" class="btn-back-float">返回列表</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 设置弹窗 -->
+  <div id="settings-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>应用设置</h3>
+        <span class="close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="login-info">
+          <div class="form-group">
+            <label>登录状态:</label>
+            <span id="settings-login-status" class="not-logged-in">未登录</span>
+          </div>
+          <div id="login-time-container" class="form-group" style="display:none;">
+            <label>上次登录时间:</label>
+            <span id="last-login-time">-</span>
+          </div>
+          <div class="form-buttons">
+            <button id="btn-open-login" class="btn">登录微信公众平台</button>
+          </div>
+        </div>
+        
+        <hr class="separator">
+        
+        <div class="manual-settings">
+          <h4>手动设置参数（也可以通过登录自动获取）</h4>
+          <div class="form-group">
+            <label for="cookie">Cookie:</label>
+            <textarea id="cookie" rows="4" placeholder="填入微信公众平台Cookie"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="token">Token:</label>
+            <input type="text" id="token" placeholder="填入微信公众平台Token">
+          </div>
+          <div class="form-group">
+            <label for="fingerprint">Fingerprint:</label>
+            <input type="text" id="fingerprint" placeholder="填入搜索指纹">
+          </div>
+        </div>
+        
+        <div class="form-help">
+          <p>获取配置参数的方法：</p>
+          <ol>
+            <li>登录微信公众平台 (mp.weixin.qq.com)</li>
+            <li>进入"草稿箱"</li>
+            <li>点击"图文模板"，选择"新建图文模板"</li>
+            <li>点击"超链接"，选择"选择其他公众号"</li>
+            <li>打开浏览器开发者工具(F12)</li>
+            <li>在Network标签页中找到 searchbiz 请求</li>
+            <li>从请求中获取参数</li>
+          </ol>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-save-settings">保存设置</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 登录提示弹窗 -->
+  <div id="login-prompt-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>登录提示</h3>
+        <span class="close-login-prompt">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>您需要先登录微信公众平台才能使用此功能。</p>
+        <p>登录后系统会自动获取必要的访问参数。</p>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-login" class="btn-secondary">取消</button>
+        <button id="btn-confirm-login" class="btn-primary">去登录</button>
+      </div>
+    </div>
+  </div>
+  
+  <script src="renderer.js"></script>
+</body>
+</html> 
