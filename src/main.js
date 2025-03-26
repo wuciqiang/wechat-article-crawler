@@ -367,8 +367,8 @@ ipcMain.handle('get-articles', async (event, params) => {
     // 开始同步
     let syncData;
     if (syncAll) {
-      // 增量同步
-      syncData = await syncArticles(accountName, fakeid, settings, emitter, lastSyncTime);
+      // 全量同步时，强制lastSyncTime为0
+      syncData = await syncArticles(accountName, fakeid, settings, emitter, 0);
     } else {
       // 正常分页获取
       syncData = await getArticlesByPage(accountName, fakeid, settings, page);
@@ -381,21 +381,132 @@ ipcMain.handle('get-articles', async (event, params) => {
   }
 });
 
+// 常规分页获取文章
+async function getArticlesByPage(accountName, fakeid, settings, page = 1) {
+  try {
+    console.log(`Getting articles for ${accountName}, page ${page}`);
+    
+    const options = {
+      method: 'GET',
+      headers: {
+        'Cookie': settings.cookie,
+        'User-Agent': getUserAgent()
+      },
+      params: {
+        action: 'list_ex',
+        begin: (page - 1) * 10,
+        count: 10,
+        fakeid: fakeid,
+        type: '9',
+        query: '',
+        token: settings.token,
+        lang: 'zh_CN',
+        f: 'json',
+        ajax: '1'
+      }
+    };
+    
+    const result = await safeRequest('https://mp.weixin.qq.com/cgi-bin/appmsg', options);
+    
+    if (!result.success) {
+      throw new Error(`Failed to fetch articles: ${result.message}`);
+    }
+    
+    const data = result.data;
+    
+    if (!data.base_resp || data.base_resp.ret !== 0) {
+      throw new Error(`API error: ${data.base_resp?.ret}, ${data.base_resp?.err_msg || 'Unknown error'}`);
+    }
+    
+    const articles = data.app_msg_list || [];
+    const totalCount = data.app_msg_cnt || 0;
+    
+    // 格式化文章数据
+    const formattedArticles = articles.map(article => ({
+      aid: article.aid,
+      title: article.title,
+      link: article.link,
+      digest: article.digest || '',
+      cover: article.cover,
+      create_time: article.create_time * 1000, // 转换为毫秒
+      update_time: article.update_time * 1000, // 转换为毫秒
+      author: article.author || '',
+      itemidx: article.itemidx
+    }));
+    
+    // 获取本地文章
+    const localArticles = readArticles(accountName);
+    
+    // 使用Map进行去重，以aid作为唯一标识
+    const articlesMap = new Map();
+    
+    // 先添加已有的文章
+    localArticles.forEach(article => {
+      articlesMap.set(article.aid || article.link, article);
+    });
+    
+    // 添加新文章，如果有重复的会覆盖
+    formattedArticles.forEach(article => {
+      articlesMap.set(article.aid || article.link, article);
+    });
+    
+    // 将Map转回数组并按创建时间排序
+    const mergedArticles = Array.from(articlesMap.values());
+    mergedArticles.sort((a, b) => b.create_time - a.create_time);
+    
+    // 保存合并后的文章到本地
+    saveArticles(accountName, mergedArticles);
+    
+    // 更新同步进度
+    const syncProgress = {
+      total: totalCount,
+      synced: mergedArticles.length,
+      lastSync: Date.now()
+    };
+    saveSyncProgress(accountName, syncProgress);
+    
+    return {
+      success: true,
+      articles: mergedArticles,
+      total: totalCount,
+      hasMore: articles.length === 10 && (page - 1) * 10 + articles.length < totalCount
+    };
+  } catch (error) {
+    console.error('Failed to fetch articles:', error);
+    return {
+      success: false,
+      message: error.message,
+      articles: []
+    };
+  }
+}
+
 // 同步文章 - 支持增量同步
 async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime = 0) {
   try {
-    console.log(`Starting sync for account: ${accountName}, fakeid: ${fakeid}, lastSyncTime: ${lastSyncTime}`);
+    // 使用 Buffer 处理中文编码
+    const log = (message, data = null) => {
+      const encodedMessage = Buffer.from(message).toString('utf8');
+      if (data) {
+        console.log(`[Sync] ${encodedMessage}:`, data);
+      } else {
+        console.log(`[Sync] ${encodedMessage}`);
+      }
+    };
+    
+    log(`Starting sync for account: ${accountName}, fakeid: ${fakeid}`);
     
     // 获取本地文章
     const localArticles = readArticles(accountName);
     const existingArticleIds = new Set(localArticles.map(a => a.aid || a.link));
+    log(`Local articles count: ${localArticles.length}`);
+    log(`Existing article IDs: ${Array.from(existingArticleIds).length}`);
     
     // 创建新文章的集合
     const newArticles = [];
     let totalArticleCount = 0;
     let begin = 0;
     let hasMore = true;
-    let latestArticleTime = lastSyncTime;
     
     // 发送初始进度
     emitter.emit('sync-progress', {
@@ -406,16 +517,112 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
     // 是否成功获取了文章
     let fetchSuccessful = false;
     
+    // 先获取第一页，获取总文章数
+    try {
+      log(`Fetching first page with begin=0, count=10`);
+      const options = {
+        method: 'GET',
+        headers: {
+          'Cookie': settings.cookie,
+          'User-Agent': getUserAgent()
+        },
+        params: {
+          action: 'list_ex',
+          begin: 0,
+          count: 10,
+          fakeid,
+          type: '9',
+          query: '',
+          token: settings.token,
+          lang: 'zh_CN',
+          f: 'json',
+          ajax: '1'
+        }
+      };
+      
+      const result = await safeRequest('https://mp.weixin.qq.com/cgi-bin/appmsg', options);
+      
+      if (result.success && result.data.base_resp?.ret === 0) {
+        totalArticleCount = result.data.app_msg_cnt || 0;
+        log(`Total articles count from API: ${totalArticleCount}`);
+        log(`First page response:`, {
+          base_resp: result.data.base_resp,
+          app_msg_cnt: result.data.app_msg_cnt,
+          app_msg_list_length: result.data.app_msg_list?.length
+        });
+        
+        // 处理第一页的文章
+        const firstPageArticles = result.data.app_msg_list || [];
+        log(`Processing ${firstPageArticles.length} articles from first page`);
+        
+        for (const article of firstPageArticles) {
+          if (!article) continue;
+          
+          const formattedArticle = {
+            aid: article.aid,
+            title: article.title,
+            link: article.link,
+            digest: article.digest || '',
+            cover: article.cover,
+            create_time: article.create_time * 1000,
+            update_time: article.update_time * 1000,
+            author: article.author || '',
+            itemidx: article.itemidx
+          };
+          
+          const articleId = formattedArticle.aid || formattedArticle.link;
+          if (articleId && !existingArticleIds.has(articleId)) {
+            newArticles.push(formattedArticle);
+            existingArticleIds.add(articleId);
+            log(`Added new article: ${formattedArticle.title}`);
+            
+            // 发送文章更新事件
+            emitter.emit('article-update', {
+              action: 'add',
+              article: formattedArticle
+            });
+          } else {
+            log(`Skipped existing article: ${formattedArticle.title}`);
+          }
+        }
+      }
+    } catch (error) {
+      log(`Failed to get total article count: ${error.message}`);
+      return { success: false, message: `Failed to get total article count: ${error.message}` };
+    }
+    
+    // 从第二页开始获取
+    begin = 10;
+    
     while (hasMore) {
       const count = 10; // 每次获取10篇文章
+      
+      // 检查是否已经达到或超过总文章数
+      const currentTotalArticles = newArticles.length + localArticles.length;
+      if (currentTotalArticles >= totalArticleCount) {
+        log(`Stopping sync: Reached total count`, {
+          currentTotalArticles,
+          totalArticleCount
+        });
+        hasMore = false;
+        break;
+      }
+      
+      // 检查begin值是否超出范围
+      if (begin >= totalArticleCount) {
+        log(`Stopping sync: Begin value ${begin} exceeds total count ${totalArticleCount}`);
+        hasMore = false;
+        break;
+      }
       
       // 发送进度更新
       emitter.emit('sync-progress', {
         message: `正在同步文章 ${begin+1} - ${begin+count}...`,
-        progress: { synced: begin, total: totalArticleCount || '未知' }
+        progress: { synced: begin, total: totalArticleCount }
       });
       
       try {
+        log(`Fetching page with begin=${begin}, count=${count}`);
         // 构建请求选项
         const options = {
           method: 'GET',
@@ -442,8 +649,8 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
         
         // 检查结果
         if (!result.success) {
-          console.error('Failed to fetch articles batch:', result.message);
-          if (begin === 0) {
+          log(`Failed to fetch articles batch: ${result.message}`);
+          if (begin === 10) {
             return { success: false, message: `Failed to fetch articles: ${result.message}` };
           }
           break; // 跳出循环，使用已获取的文章
@@ -453,9 +660,13 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
         fetchSuccessful = true;
         
         const data = result.data;
+        log(`Page response:`, {
+          base_resp: data.base_resp,
+          app_msg_list_length: data.app_msg_list?.length
+        });
         
         if (!data.base_resp || data.base_resp.ret !== 0) {
-          console.error('Error in API response:', data.base_resp);
+          log(`Error in API response:`, data.base_resp);
           if (data.base_resp && data.base_resp.err_msg) {
             emitter.emit('sync-progress', {
               message: `API错误: ${data.base_resp.err_msg}`,
@@ -463,7 +674,7 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
             });
           }
           // 如果是第一批就失败，则终止同步
-          if (begin === 0) {
+          if (begin === 10) {
             return {
               success: false,
               message: `Error code: ${data.base_resp?.ret}, ${data.base_resp?.err_msg || 'Unknown error'}`
@@ -474,11 +685,16 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
         }
         
         const articles = data.app_msg_list || [];
-        totalArticleCount = data.app_msg_cnt || 0;
+        log(`Processing ${articles.length} articles from current page`);
         
-        // 检查增量同步情况
-        let reachedOldArticles = false;
+        // 如果返回的文章列表为空，说明已经到达末尾
+        if (articles.length === 0) {
+          log(`Stopping sync: Empty article list received`);
+          hasMore = false;
+          break;
+        }
         
+        // 处理文章
         for (const article of articles) {
           if (!article) continue; // 跳过无效文章
           
@@ -495,22 +711,11 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
             itemidx: article.itemidx
           };
           
-          // 检查是否已经达到上次同步的文章
-          if (formattedArticle.create_time <= lastSyncTime) {
-            console.log(`Reached article with time ${formattedArticle.create_time} <= lastSyncTime ${lastSyncTime}`);
-            reachedOldArticles = true;
-            break;
-          }
-          
           // 如果不在现有文章ID集合中，则添加
           const articleId = formattedArticle.aid || formattedArticle.link;
           if (articleId && !existingArticleIds.has(articleId)) {
             newArticles.push(formattedArticle);
-            
-            // 记录最新的文章时间
-            if (formattedArticle.create_time > latestArticleTime) {
-              latestArticleTime = formattedArticle.create_time;
-            }
+            log(`Added new article: ${formattedArticle.title}`);
             
             // 发送文章更新事件
             emitter.emit('article-update', {
@@ -520,20 +725,37 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
             
             // 添加到存在集合，避免重复添加
             existingArticleIds.add(articleId);
+          } else {
+            log(`Skipped existing article: ${formattedArticle.title}`);
           }
         }
         
-        // 如果已经到达以前同步过的文章，或者没有更多文章，结束同步
-        if (reachedOldArticles || articles.length < count) {
+        // 检查是否需要继续获取
+        const updatedTotalArticles = newArticles.length + localArticles.length;
+        log(`Current status:`, {
+          currentTotalArticles: updatedTotalArticles,
+          totalArticleCount,
+          newArticlesCount: newArticles.length,
+          localArticlesCount: localArticles.length,
+          hasMore: updatedTotalArticles < totalArticleCount
+        });
+        
+        // 如果已经获取了所有文章，结束同步
+        if (updatedTotalArticles >= totalArticleCount) {
+          log(`Stopping sync: Reached total count`, {
+            currentTotalArticles: updatedTotalArticles,
+            totalArticleCount
+          });
           hasMore = false;
         } else {
           begin += count;
+          log(`Continuing sync, next begin=${begin}`);
         }
         
       } catch (error) {
-        console.error('Error during batch fetch:', error);
+        log(`Error during batch fetch: ${error.message}`);
         // 如果是第一批就失败，返回错误
-        if (begin === 0) {
+        if (begin === 10) {
           return {
             success: false,
             message: `Failed to sync: ${error.message}`
@@ -549,6 +771,7 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
     
     // 如果没有成功获取任何文章，返回错误
     if (!fetchSuccessful) {
+      log(`No articles were successfully fetched`);
       return {
         success: false,
         message: '同步失败：无法获取文章列表'
@@ -557,6 +780,11 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
     
     // 更新所有文章列表
     const allArticles = [...newArticles, ...localArticles];
+    log(`Final article counts:`, {
+      totalArticles: allArticles.length,
+      newArticles: newArticles.length,
+      localArticles: localArticles.length
+    });
     
     // 按create_time降序排序
     allArticles.sort((a, b) => b.create_time - a.create_time);
@@ -568,8 +796,7 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
     const syncProgress = {
       total: totalArticleCount,
       synced: allArticles.length,
-      lastSync: Date.now(),
-      lastArticleTime: latestArticleTime || lastSyncTime  // 保留原有时间戳如果没有新文章
+      lastSync: Date.now()
     };
     saveSyncProgress(accountName, syncProgress);
     
@@ -587,20 +814,22 @@ async function syncArticles(accountName, fakeid, settings, emitter, lastSyncTime
       progress: syncProgress
     });
     
+    log(`Sync completed: ${syncCompleteMessage}`);
+    
     // 确保返回的消息非空
     return {
       success: true,
       articles: allArticles,
       total: totalArticleCount,
       newCount: newArticles.length,
-      message: syncCompleteMessage // 添加消息字段供前端显示
+      message: syncCompleteMessage
     };
   } catch (error) {
-    console.error('Failed to sync articles:', error);
+    log(`Failed to sync articles: ${error.message}`);
     return { 
       success: false, 
       message: `同步失败: ${error.message}`,
-      articles: [] // 确保返回空数组而不是undefined
+      articles: []
     };
   }
 }
@@ -959,75 +1188,6 @@ function saveSyncProgress(accountName, progress) {
   const progressStore = store.get('syncProgress') || {};
   progressStore[accountName] = progress;
   store.set('syncProgress', progressStore);
-}
-
-// 常规分页获取文章
-async function getArticlesByPage(accountName, fakeid, settings, page = 1) {
-  try {
-    console.log(`Getting articles for ${accountName}, page ${page}`);
-    
-    const options = {
-      method: 'GET',
-      headers: {
-        'Cookie': settings.cookie,
-        'User-Agent': getUserAgent()
-      },
-      params: {
-        action: 'list_ex',
-        begin: (page - 1) * 10,
-        count: 10,
-        fakeid: fakeid,
-        type: '9',
-        query: '',
-        token: settings.token,
-        lang: 'zh_CN',
-        f: 'json',
-        ajax: '1'
-      }
-    };
-    
-    const result = await safeRequest('https://mp.weixin.qq.com/cgi-bin/appmsg', options);
-    
-    if (!result.success) {
-      throw new Error(`Failed to fetch articles: ${result.message}`);
-    }
-    
-    const data = result.data;
-    
-    if (!data.base_resp || data.base_resp.ret !== 0) {
-      throw new Error(`API error: ${data.base_resp?.ret}, ${data.base_resp?.err_msg || 'Unknown error'}`);
-    }
-    
-    const articles = data.app_msg_list || [];
-    const totalCount = data.app_msg_cnt || 0;
-    
-    // 格式化文章数据
-    const formattedArticles = articles.map(article => ({
-      aid: article.aid,
-      title: article.title,
-      link: article.link,
-      digest: article.digest || '',
-      cover: article.cover,
-      create_time: article.create_time * 1000, // 转换为毫秒
-      update_time: article.update_time * 1000, // 转换为毫秒
-      author: article.author || '',
-      itemidx: article.itemidx
-    }));
-    
-    return {
-      success: true,
-      articles: formattedArticles,
-      total: totalCount,
-      hasMore: articles.length === 10 && (page - 1) * 10 + articles.length < totalCount
-    };
-  } catch (error) {
-    console.error('Failed to fetch articles:', error);
-    return {
-      success: false,
-      message: error.message,
-      articles: []
-    };
-  }
 }
 
 // 处理文章HTML内容
