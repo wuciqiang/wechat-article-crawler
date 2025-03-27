@@ -515,6 +515,62 @@ function showArticleDetail(article) {
   // 使用API方式获取文章内容
   loadingIndicator.style.display = 'block';
   
+  // 获取当前文章在列表中的索引
+  const currentIndex = state.articles.findIndex(a => a.link === article.link);
+  
+  // 添加上一篇和下一篇按钮
+  if (currentIndex > 0) {
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'action-button prev-article';
+    prevBtn.textContent = '上一篇';
+    prevBtn.style.position = 'fixed';
+    prevBtn.style.left = '30%'; // 使用百分比定位
+    prevBtn.style.top = '50%';
+    prevBtn.style.transform = 'translate(-50%, -50%)';
+    prevBtn.style.zIndex = '1000';
+    prevBtn.style.cursor = 'pointer';
+    prevBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    prevBtn.style.color = 'white';
+    prevBtn.style.border = 'none';
+    prevBtn.style.padding = '10px 15px';
+    prevBtn.style.borderRadius = '4px';
+    prevBtn.style.transition = 'background-color 0.3s';
+    prevBtn.addEventListener('mouseover', () => {
+      prevBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    });
+    prevBtn.addEventListener('mouseout', () => {
+      prevBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    });
+    prevBtn.addEventListener('click', () => showArticleDetail(state.articles[currentIndex - 1]));
+    actionContainer.appendChild(prevBtn);
+  }
+  
+  if (currentIndex < state.articles.length - 1) {
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'action-button next-article';
+    nextBtn.textContent = '下一篇';
+    nextBtn.style.position = 'fixed';
+    nextBtn.style.right = '5%'; // 使用百分比定位
+    nextBtn.style.top = '50%';
+    nextBtn.style.transform = 'translate(50%, -50%)';
+    nextBtn.style.zIndex = '1000';
+    nextBtn.style.cursor = 'pointer';
+    nextBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    nextBtn.style.color = 'white';
+    nextBtn.style.border = 'none';
+    nextBtn.style.padding = '10px 15px';
+    nextBtn.style.borderRadius = '4px';
+    nextBtn.style.transition = 'background-color 0.3s';
+    nextBtn.addEventListener('mouseover', () => {
+      nextBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    });
+    nextBtn.addEventListener('mouseout', () => {
+      nextBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    });
+    nextBtn.addEventListener('click', () => showArticleDetail(state.articles[currentIndex + 1]));
+    actionContainer.appendChild(nextBtn);
+  }
+  
   // API请求获取文章详情
   window.api.getArticleDetail(article.link)
     .then(result => {
