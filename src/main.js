@@ -131,10 +131,51 @@ ipcMain.handle('save-account', async (event, account) => {
 
 // 删除公众号
 ipcMain.handle('delete-account', async (event, accountName) => {
-  const accounts = store.get('accounts');
-  const newAccounts = accounts.filter(a => a.name !== accountName);
-  store.set('accounts', newAccounts);
-  return newAccounts;
+  try {
+    // 删除公众号信息
+    const accounts = store.get('accounts') || [];
+    const newAccounts = accounts.filter(a => a.name !== accountName);
+    
+    // 如果找不到要删除的公众号，返回错误
+    if (newAccounts.length === accounts.length) {
+      return { 
+        success: false, 
+        message: `未找到公众号 ${accountName}`,
+        accounts: accounts // 保持原有列表不变
+      };
+    }
+    
+    // 删除公众号的本地文章数据
+    const articles = store.get('articles') || {};
+    delete articles[accountName];
+    store.set('articles', articles);
+
+    // 删除公众号的同步进度数据
+    const syncProgress = store.get('syncProgress') || {};
+    delete syncProgress[accountName];
+    store.set('syncProgress', syncProgress);
+
+    // 保存更新后的公众号列表
+    store.set('accounts', newAccounts);
+
+    console.log(`Deleted account ${accountName} and its associated data`);
+    
+    // 确保返回成功状态和更新后的账号列表
+    return { 
+      success: true, 
+      message: `已删除公众号 ${accountName} 及其相关数据`,
+      accounts: newAccounts 
+    };
+  } catch (error) {
+    console.error('Failed to delete account:', error);
+    // 发生错误时，返回原有账号列表
+    const accounts = store.get('accounts') || [];
+    return { 
+      success: false, 
+      message: `删除失败: ${error.message}`,
+      accounts: accounts // 保持原有列表不变
+    };
+  }
 });
 
 // 获取应用设置

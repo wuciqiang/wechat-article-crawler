@@ -744,27 +744,38 @@ function editAccount(account) {
 
 // 删除公众号
 async function deleteAccount(accountName) {
-  if (!confirm(`确定要删除公众号"${accountName}"吗？`)) return;
+  // 添加删除确认提示
+  if (!confirm(`确定要删除公众号"${accountName}"吗？`)) {
+    return;
+  }
   
   try {
-    // 从本地存储中删除
-    const accounts = await window.api.deleteAccount(accountName);
+    // 使用正确的 API 调用方式
+    const result = await window.api.deleteAccount(accountName);
     
-    // 更新状态
-    state.accounts = accounts;
-    
-    // 如果当前选中的是被删除的公众号，清空当前选择
-    if (state.currentAccount && state.currentAccount.name === accountName) {
-      state.currentAccount = null;
-      state.articles = [];
-      currentAccountName.textContent = '请选择公众号';
-      progressInfo.textContent = '未开始获取';
-      articlesData.innerHTML = '';
-      loadMoreBtn.disabled = true;
+    if (result.success) {
+      // 更新状态
+      state.accounts = result.accounts;
+      
+      // 如果当前选中的是被删除的公众号，清空当前选择
+      if (state.currentAccount && state.currentAccount.name === accountName) {
+        state.currentAccount = null;
+        state.articles = [];
+        currentAccountName.textContent = '请选择公众号';
+        progressInfo.textContent = '未开始获取';
+        articlesData.innerHTML = '';
+        loadMoreBtn.disabled = true;
+      }
+      
+      // 更新UI
+      renderAccountsList();
+      
+      // 显示成功消息
+      showToast(result.message);
+    } else {
+      // 显示错误消息
+      showToast(result.message);
     }
-    
-    // 更新UI
-    renderAccountsList();
   } catch (error) {
     console.error('删除公众号失败:', error);
     showToast('删除公众号失败');
