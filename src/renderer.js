@@ -597,14 +597,6 @@ function showArticleDetail(article) {
               a { color: #1890ff; text-decoration: none; }
               a:hover { text-decoration: underline; }
               .rich_media_content { overflow: hidden; }
-              h1 { font-size: 24px; margin-bottom: 16px; }
-              .author-info { 
-                margin-bottom: 20px; 
-                color: #666; 
-                font-size: 14px; 
-                border-bottom: 1px solid #eee;
-                padding-bottom: 10px;
-              }
               pre, code { 
                 background-color: #f5f5f5; 
                 padding: 8px; 
@@ -623,11 +615,6 @@ function showArticleDetail(article) {
             </style>
           </head>
           <body>
-            <h1>${result.detail.title || article.title}</h1>
-            <div class="author-info">
-              <span>作者: ${result.detail.author || article.author || '未知'}</span>
-              <span style="margin-left: 15px;">发布时间: ${result.detail.publishTime || formattedDate || ''}</span>
-            </div>
             <div class="rich_media_content">${result.detail.content || '内容为空'}</div>
           </body>
           </html>
