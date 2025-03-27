@@ -178,50 +178,105 @@ function renderAccountsList() {
     const li = document.createElement('li');
     li.setAttribute('data-name', account.name);
     
+    // 添加基础样式
+    li.style.cssText = `
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      padding: 12px 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    `;
+    
+    // 添加悬停效果
+    li.addEventListener('mouseover', () => {
+      if (!li.classList.contains('active')) {
+        li.style.background = '#e9ecef';
+        li.style.transform = 'translateY(-1px)';
+        li.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+      }
+    });
+    
+    li.addEventListener('mouseout', () => {
+      if (!li.classList.contains('active')) {
+        li.style.background = '#f8f9fa';
+        li.style.transform = 'translateY(0)';
+        li.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+      }
+    });
+    
+    // 清除其他按钮的选中效果
     if (state.currentAccount && state.currentAccount.name === account.name) {
+      // 先清除所有按钮的选中效果
+      const allItems = accountsList.querySelectorAll('li');
+      allItems.forEach(item => {
+        item.classList.remove('active');
+        item.style.background = '#f8f9fa';
+        item.style.borderColor = '#e9ecef';
+        item.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+      });
+      
+      // 设置当前按钮的选中效果
       li.classList.add('active');
+      li.style.background = '#e3f2fd';
+      li.style.borderColor = '#90caf9';
+      li.style.boxShadow = '0 2px 8px rgba(33,150,243,0.2)';
     }
     
     // 创建公众号名称和进度容器
     const accountInfo = document.createElement('div');
     accountInfo.className = 'account-info';
     accountInfo.textContent = account.name;
+    accountInfo.style.cssText = `
+      font-size: 14px;
+      font-weight: 500;
+      color: #2c3e50;
+    `;
     
     // 创建操作按钮容器
     const actions = document.createElement('div');
     actions.className = 'account-actions';
-    
-    // 刷新按钮
-    const refreshBtn = document.createElement('button');
-    refreshBtn.className = 'refresh-btn';
-    refreshBtn.textContent = '刷新';
-    refreshBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      selectAccount(account);
-      refreshArticles(account);
-    });
-    
-    // 编辑按钮
-    const editBtn = document.createElement('button');
-    editBtn.className = 'edit-btn';
-    editBtn.textContent = '编辑';
-    editBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      editAccount(account);
-    });
+    actions.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    `;
     
     // 删除按钮
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'delete-btn';
     deleteBtn.textContent = '删除';
+    deleteBtn.style.cssText = `
+      background: #ffebee;
+      color: #d32f2f;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s ease;
+    `;
+    
+    // 添加删除按钮悬停效果
+    deleteBtn.addEventListener('mouseover', () => {
+      deleteBtn.style.background = '#ffcdd2';
+    });
+    
+    deleteBtn.addEventListener('mouseout', () => {
+      deleteBtn.style.background = '#ffebee';
+    });
+    
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       deleteAccount(account.name);
     });
     
-    // 添加按钮到操作容器
-    actions.appendChild(refreshBtn);
-    actions.appendChild(editBtn);
+    // 添加删除按钮到操作容器
     actions.appendChild(deleteBtn);
     
     // 添加所有元素到列表项
@@ -230,6 +285,22 @@ function renderAccountsList() {
     
     // 点击公众号选择它
     li.addEventListener('click', () => {
+      // 清除所有按钮的选中效果
+      const allItems = accountsList.querySelectorAll('li');
+      allItems.forEach(item => {
+        item.classList.remove('active');
+        item.style.background = '#f8f9fa';
+        item.style.borderColor = '#e9ecef';
+        item.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+      });
+      
+      // 设置当前按钮的选中效果
+      li.classList.add('active');
+      li.style.background = '#e3f2fd';
+      li.style.borderColor = '#90caf9';
+      li.style.boxShadow = '0 2px 8px rgba(33,150,243,0.2)';
+      
+      // 选择公众号
       selectAccount(account);
     });
     
