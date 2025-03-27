@@ -239,6 +239,20 @@ function renderAccountsList() {
 
 // 选择公众号
 function selectAccount(account) {
+  // 关闭文章详情页面
+  const articleDetailView = document.getElementById('article-detail-view');
+  const articlesView = document.getElementById('articles-view');
+  if (articleDetailView && articlesView) {
+    articleDetailView.style.display = 'none';
+    articlesView.style.display = 'flex';
+  }
+
+  // 清空文章列表
+  const articlesList = document.getElementById('articles-list');
+  if (articlesList) {
+    articlesList.innerHTML = '';
+  }
+
   state.currentAccount = account;
   state.articles = [];
   state.currentPage = 0;
@@ -1272,4 +1286,41 @@ function init() {
 }
 
 // 启动时调用初始化
-init(); 
+init();
+
+async function switchAccount(accountName) {
+  try {
+    // 关闭文章详情页面
+    const articleDetailView = document.getElementById('article-detail-view');
+    const articlesView = document.getElementById('articles-view');
+    if (articleDetailView && articlesView) {
+      articleDetailView.style.display = 'none';
+      articlesView.style.display = 'flex';
+    }
+
+    // 清空文章列表
+    const articlesList = document.getElementById('articles-list');
+    if (articlesList) {
+      articlesList.innerHTML = '';
+    }
+
+    // 更新当前账号
+    state.currentAccount = state.accounts.find(a => a.name === accountName);
+
+    // 获取新账号的文章列表
+    const result = await window.api.getArticles({
+      accountName,
+      fakeid: state.accounts.find(a => a.name === accountName)?.fakeid,
+      page: 1
+    });
+
+    if (result.success) {
+      displayArticles(result.articles);
+    } else {
+      showError('获取文章列表失败：' + result.message);
+    }
+  } catch (error) {
+    console.error('切换账号失败:', error);
+    showError('切换账号失败：' + error.message);
+  }
+} 
