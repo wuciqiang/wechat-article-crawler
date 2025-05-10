@@ -69,7 +69,7 @@ async function initApp() {
   bindEvents();
   setupLoginListeners();
   if (window.domElements.searchArticlesInput) {
-    window.domElements.searchArticlesInput.addEventListener('input', handleSearchInput);
+    window.domElements.searchArticlesInput.addEventListener('input', window.articleManager.handleSearchInput);
   }
 }
 
@@ -126,390 +126,6 @@ function updateLoginStatus() {
     window.domElements.settingsLoginStatus.textContent = '未登录';
     window.domElements.settingsLoginStatus.className = 'not-logged-in';
     window.domElements.loginTimeContainer.style.display = 'none';
-  }
-}
-
-// 加载文章列表
-async function loadArticles(account, page = 1) {
-  if (!validateSettings()) return;
-  if (!account.fakeid) {
-    searchAccount(account);
-    return;
-  }
-  
-  try {
-    window.appState.isLoading = true;
-    
-    if (page === 1) {
-      window.domElements.progressInfo.textContent = '正在加载本地文章...';
-      const localResult = await window.api.getLocalArticles(account.name);
-      if (localResult.success && localResult.articles.length > 0) {
-        const syncResult = await window.api.getSyncProgress(account.name);
-        const progress = syncResult.success ? syncResult.progress : { total: 0, synced: 0, lastSync: null };
-        
-        window.appState.allArticlesForCurrentAccount = localResult.articles;
-        window.appState.totalArticles = progress.total || localResult.articles.length;
-        window.appState.currentPage = 1;
-        
-        applySearchAndSort();
-        renderArticles(false);
-        
-        const lastSyncDate = progress.lastSync ? new Date(progress.lastSync).toLocaleString() : '未知';
-        window.domElements.progressInfo.textContent = `已从本地加载 ${localResult.articles.length} 篇文章 (最后同步: ${lastSyncDate})`;
-        
-        window.domElements.loadMoreBtn.disabled = window.appState.articles.length >= window.appState.totalArticles;
-        addSyncAllButton();
-        window.appState.isLoading = false;
-        return; 
-      }
-    }
-    
-    window.domElements.progressInfo.textContent = '正在从网络获取文章...';
-    window.domElements.loadMoreBtn.disabled = true;
-    
-    const params = {
-      accountName: account.name,
-      fakeid: account.fakeid,
-      page: page
-    };
-    
-    const result = await window.api.getArticles(params);
-    
-    if (result.success) {
-      let newRawArticles = result.articles;
-      if (page > 1) {
-        window.appState.allArticlesForCurrentAccount = [...window.appState.allArticlesForCurrentAccount, ...newRawArticles];
-      } else {
-        window.appState.allArticlesForCurrentAccount = newRawArticles;
-      }
-      
-      window.appState.totalArticles = result.total;
-      window.appState.currentPage = page;
-      
-      applySearchAndSort();
-      renderArticles(page > 1 && window.appState.currentSearchTerm.trim() === '');
-      
-      window.domElements.progressInfo.textContent = `已获取 ${window.appState.articles.length}/${window.appState.totalArticles} 篇文章`;
-      window.domElements.loadMoreBtn.disabled = window.appState.articles.length >= window.appState.totalArticles;
-      addSyncAllButton();
-    } else {
-      window.domElements.progressInfo.textContent = result.message;
-      window.uiUtils.showToast(result.message);
-    }
-  } catch (error) {
-    console.error('加载文章失败:', error);
-    window.domElements.progressInfo.textContent = '加载失败';
-    window.uiUtils.showToast('加载文章失败');
-  } finally {
-    window.appState.isLoading = false;
-  }
-}
-
-// 渲染文章列表
-function renderArticles(append = false) {
-  if (!append) {
-    window.domElements.articlesData.innerHTML = '';
-  }
-  
-  if (window.appState.articles.length === 0) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 4;
-    if (window.appState.currentSearchTerm && window.appState.currentSearchTerm.trim() !== '') {
-      td.textContent = '无对应文章，请尝试其他关键字';
-    } else {
-      td.textContent = '暂无文章';
-    }
-    td.style.textAlign = 'center';
-    td.style.padding = '20px';
-    tr.appendChild(td);
-    window.domElements.articlesData.appendChild(tr);
-    return;
-  }
-  
-  const startIndex = append ? window.domElements.articlesData.children.length : 0;
-  
-  for (let i = startIndex; i < window.appState.articles.length; i++) {
-    const article = window.appState.articles[i];
-    
-    const tr = document.createElement('tr');
-    tr.setAttribute('data-index', i);
-    
-    const titleTd = document.createElement('td');
-    titleTd.className = 'ellipsis-cell';
-    const titleLink = document.createElement('a');
-    titleLink.href = '#';
-    titleLink.textContent = article.title;
-    titleLink.className = 'ellipsis-text';
-    titleLink.title = article.title; 
-    titleLink.style.color = '#1890ff';
-    titleLink.style.textDecoration = 'none';
-    titleLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      showArticleDetail(article);
-    });
-    titleTd.appendChild(titleLink);
-    
-    const authorTd = document.createElement('td');
-    authorTd.className = 'ellipsis-cell';
-    const authorText = article.author || '未知';
-    authorTd.textContent = authorText;
-    authorTd.title = authorText; 
-    
-    const dateTd = document.createElement('td');
-    const formattedDate = window.uiUtils.formatDate(article.create_time);
-    dateTd.textContent = formattedDate;
-    dateTd.title = formattedDate; 
-    
-    const digestTd = document.createElement('td');
-    digestTd.className = 'ellipsis-cell';
-    const digestText = article.digest || '无摘要';
-    digestTd.textContent = digestText;
-    digestTd.title = digestText; 
-    
-    tr.appendChild(titleTd);
-    tr.appendChild(authorTd);
-    tr.appendChild(dateTd);
-    tr.appendChild(digestTd);
-    
-    window.domElements.articlesData.appendChild(tr);
-  }
-}
-
-// 显示文章详情 - 仅使用iframe显示内容
-function showArticleDetail(article) {
-  window.domElements.articleTitle.textContent = article.title;
-  window.domElements.articleAuthor.textContent = `作者: ${article.author || '未知'}`;
-  
-  const formattedDate = window.uiUtils.formatDate(article.create_time);
-  window.domElements.articleDate.textContent = `发布日期: ${formattedDate}`;
-  
-  window.domElements.articleFrame.srcdoc = '';
-  
-  window.domElements.errorContainer.style.display = 'none';
-  window.domElements.loadingIndicator.style.display = 'block';
-  
-  const actionContainer = document.querySelector('.article-actions');
-  while (actionContainer.childNodes.length > 1) { 
-    actionContainer.removeChild(actionContainer.lastChild);
-  }
-  
-  window.domElements.articlesView.style.display = 'none';
-  window.domElements.articleDetailView.style.display = 'flex';
-  
-  window.domElements.articleFrame.style.display = 'block';
-  window.domElements.loadingIndicator.style.display = 'block';
-  
-  const currentIndex = window.appState.articles.findIndex(a => a.link === article.link);
-  
-  if (currentIndex > 0) {
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'action-button prev-article';
-    prevBtn.textContent = '上一篇';
-    prevBtn.style.position = 'fixed';
-    prevBtn.style.left = '30%'; 
-    prevBtn.style.top = '50%';
-    prevBtn.style.transform = 'translate(-50%, -50%)';
-    prevBtn.style.zIndex = '1000';
-    prevBtn.style.cursor = 'pointer';
-    prevBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    prevBtn.style.color = 'white';
-    prevBtn.style.border = 'none';
-    prevBtn.style.padding = '10px 15px';
-    prevBtn.style.borderRadius = '4px';
-    prevBtn.style.transition = 'background-color 0.3s';
-    prevBtn.addEventListener('mouseover', () => {
-      prevBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    });
-    prevBtn.addEventListener('mouseout', () => {
-      prevBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    });
-    prevBtn.addEventListener('click', () => showArticleDetail(window.appState.articles[currentIndex - 1]));
-    actionContainer.appendChild(prevBtn);
-  }
-  
-  if (currentIndex < window.appState.articles.length - 1) {
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'action-button next-article';
-    nextBtn.textContent = '下一篇';
-    nextBtn.style.position = 'fixed';
-    nextBtn.style.right = '5%'; 
-    nextBtn.style.top = '50%';
-    nextBtn.style.transform = 'translate(50%, -50%)';
-    nextBtn.style.zIndex = '1000';
-    nextBtn.style.cursor = 'pointer';
-    nextBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    nextBtn.style.color = 'white';
-    nextBtn.style.border = 'none';
-    nextBtn.style.padding = '10px 15px';
-    nextBtn.style.borderRadius = '4px';
-    nextBtn.style.transition = 'background-color 0.3s';
-    nextBtn.addEventListener('mouseover', () => {
-      nextBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    });
-    nextBtn.addEventListener('mouseout', () => {
-      nextBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    });
-    nextBtn.addEventListener('click', () => showArticleDetail(window.appState.articles[currentIndex + 1]));
-    actionContainer.appendChild(nextBtn);
-  }
-  
-  window.api.getArticleDetail(article.link)
-    .then(result => {
-      window.domElements.loadingIndicator.style.display = 'none';
-      
-      if (result.success && result.detail && result.detail.content) {
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              body { 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-                line-height: 1.8; 
-                padding: 20px;
-                color: #333;
-                max-width: 800px;
-                margin: 0 auto;
-              }
-              img { max-width: 100%; height: auto; border-radius: 4px; }
-              a { color: #1890ff; text-decoration: none; }
-              a:hover { text-decoration: underline; }
-              .rich_media_content { overflow: hidden; }
-              pre, code { 
-                background-color: #f5f5f5; 
-                padding: 8px; 
-                border-radius: 4px; 
-                overflow: auto;
-              }
-              blockquote {
-                border-left: 4px solid #ddd;
-                padding-left: 16px;
-                margin-left: 0;
-                color: #666;
-              }
-              /* 微信特有样式兼容 */
-              .js_blockquote_wrap { border-left: 4px solid #ddd; padding-left: 16px; color: #666; }
-              .__bg_color__ { background-color: transparent !important; } 
-            </style>
-          </head>
-          <body>
-            <div class="rich_media_content">${result.detail.content || '内容为空'}</div>
-          </body>
-          </html>
-        `;
-        
-        window.domElements.articleFrame.srcdoc = htmlContent;
-      } else {
-        showErrorView(result.message || '获取内容失败', '服务器未返回有效内容');
-      }
-    })
-    .catch(error => {
-      window.domElements.loadingIndicator.style.display = 'none';
-      showErrorView(error.message || '加载出错', '请求处理过程中发生错误');
-    });
-  
-  function showErrorView(msg, details) {
-    window.domElements.articleFrame.style.display = 'none';
-    window.domElements.errorContainer.style.display = 'block';
-    window.domElements.errorMessage.textContent = msg || '无法加载文章，请稍后再试';
-    
-    const detailsText = details ? `原因: ${details}` : '';
-    window.domElements.errorDetails.innerHTML = `
-      ${detailsText}
-      <div style="margin-top: 15px;">
-        <p>可能的解决方法：</p>
-        <ul style="text-align: left; margin-top: 8px;">
-          <li>检查您的网络连接</li>
-          <li>更新登录凭据（Cookie和Token）</li>
-          <li>文章可能已被删除或者需要登录才能查看</li>
-          <li>微信可能限制了第三方应用访问此内容</li>
-        </ul>
-      </div>
-    `;
-  }
-}
-
-// 返回文章列表
-function backToList() {
-  window.domElements.articleDetailView.style.display = 'none';
-  window.domElements.articlesView.style.display = 'flex';
-  
-  window.domElements.articleFrame.srcdoc = '';
-  
-  window.domElements.articleFrame.style.display = 'none';
-  window.domElements.loadingIndicator.style.display = 'none';
-  window.domElements.errorContainer.style.display = 'none';
-}
-
-// 刷新文章
-function refreshArticles(account) {
-  if (!account) return;
-  
-  window.appState.articles = [];
-  window.appState.currentPage = 0;
-  window.domElements.articlesData.innerHTML = '';
-  loadArticles(account);
-}
-
-// 加载更多文章
-function loadMoreArticles() {
-  if (window.appState.isLoading || !window.appState.currentAccount) return;
-  loadArticles(window.appState.currentAccount, window.appState.currentPage + 1);
-}
-
-// 导出文章到Excel
-async function exportArticles() {
-  if (!window.appState.currentAccount || window.appState.articles.length === 0) {
-    window.uiUtils.showToast('没有可导出的文章');
-    return;
-  }
-  
-  try {
-    window.domElements.progressInfo.textContent = '正在导出文章...';
-    const params = {
-      accountName: window.appState.currentAccount.name,
-      articles: window.appState.articles
-    };
-    const result = await window.api.exportArticles(params);
-    if (result.success) {
-      window.domElements.progressInfo.textContent = `已获取 ${window.appState.articles.length}/${window.appState.totalArticles} 篇文章`;
-      window.uiUtils.showToast(result.message);
-    } else {
-      window.domElements.progressInfo.textContent = result.message;
-      window.uiUtils.showToast(result.message);
-    }
-  } catch (error) {
-    console.error('导出文章失败:', error);
-    window.domElements.progressInfo.textContent = '导出失败';
-    window.uiUtils.showToast('导出文章失败');
-  }
-}
-
-// 保存设置
-async function saveSettings() {
-  try {
-    const settings = {
-      cookie: window.domElements.cookieInput.value.trim(),
-      token: window.domElements.tokenInput.value.trim(),
-      fingerprint: window.domElements.fingerprintInput.value.trim(),
-      loggedIn: window.appState.settings.loggedIn,
-      lastLogin: window.appState.settings.lastLogin
-    };
-    const result = await window.api.saveSettings(settings);
-    if (result.success) {
-      window.appState.settings = settings;
-      window.domElements.settingsModal.style.display = 'none';
-      window.uiUtils.showToast('设置已保存');
-      updateLoginStatus();
-    } else {
-      window.uiUtils.showToast(`保存设置失败: ${result.message}`);
-    }
-  } catch (error) {
-    console.error('保存设置失败:', error);
-    window.uiUtils.showToast('保存设置失败');
   }
 }
 
@@ -598,13 +214,6 @@ function setupLoginListeners() {
   });
 }
 
-// 排序文章列表 - 根据创建时间
-function sortArticles() {
-  if (!window.appState.allArticlesForCurrentAccount || window.appState.allArticlesForCurrentAccount.length === 0) return;
-  applySearchAndSort();
-  renderArticles(false);
-}
-
 // 绑定事件
 function bindEvents() {
   window.domElements.addAccountBtn.addEventListener('click', () => {
@@ -625,17 +234,17 @@ function bindEvents() {
   
   window.domElements.sortOrderSelect.addEventListener('change', () => {
     window.appState.sortOrder = window.domElements.sortOrderSelect.value;
-    sortArticles();
+    window.articleManager.sortArticles();
   });
   
   window.domElements.loadMoreBtn.addEventListener('click', () => {
     if (window.appState.isLoading) return;
     window.appState.currentPage++;
-    loadArticles(window.appState.currentAccount, window.appState.currentPage);
+    window.articleManager.loadMoreArticles();
   });
   
-  window.domElements.backBtn.addEventListener('click', backToList);
-  window.domElements.backBtnFloat.addEventListener('click', backToList);
+  window.domElements.backBtn.addEventListener('click', window.articleManager.backToList);
+  window.domElements.backBtnFloat.addEventListener('click', window.articleManager.backToList);
   
   window.domElements.settingsBtn.addEventListener('click', () => {
     window.domElements.settingsModal.style.display = 'block';
@@ -652,80 +261,32 @@ function bindEvents() {
   });
   
   window.domElements.saveSettingsBtn.addEventListener('click', saveSettings);
-  window.domElements.exportBtn.addEventListener('click', exportArticles);
+  window.domElements.exportBtn.addEventListener('click', window.articleManager.exportArticles);
   window.uiUtils.setupTableColumnResize();
 }
 
-// 添加全量同步按钮
-function addSyncAllButton() {
-  let syncAllBtn = document.getElementById('btn-sync-all'); 
-  if (!syncAllBtn) {
-    syncAllBtn = document.createElement('button');
-    syncAllBtn.id = 'btn-sync-all';
-    syncAllBtn.className = 'btn';
-    syncAllBtn.textContent = '全量同步';
-    syncAllBtn.style.marginLeft = '10px';
-    syncAllBtn.addEventListener('click', () => syncAllArticles());
-    
-    const buttonContainer = window.domElements.loadMoreBtn.parentElement;
-    buttonContainer.appendChild(syncAllBtn);
-  }
-}
-
-// 全量同步文章
-async function syncAllArticles() {
-  if (!window.appState.currentAccount || window.appState.isLoading) return;
-  
+// 保存设置
+async function saveSettings() {
   try {
-    window.appState.isLoading = true;
-    const syncAllBtn = document.getElementById('btn-sync-all'); 
-    if (syncAllBtn) syncAllBtn.disabled = true;
-    window.domElements.loadMoreBtn.disabled = true;
-    window.domElements.progressInfo.textContent = '正在同步文章...';
-    
-    const params = {
-      accountName: window.appState.currentAccount.name,
-      fakeid: window.appState.currentAccount.fakeid,
-      syncAll: true,
+    const settings = {
+      cookie: window.domElements.cookieInput.value.trim(),
+      token: window.domElements.tokenInput.value.trim(),
+      fingerprint: window.domElements.fingerprintInput.value.trim(),
+      loggedIn: window.appState.settings.loggedIn,
+      lastLogin: window.appState.settings.lastLogin
     };
-    
-    const result = await window.api.getArticles(params);
-    
+    const result = await window.api.saveSettings(settings);
     if (result.success) {
-      window.appState.allArticlesForCurrentAccount = result.articles || [];
-      window.appState.totalArticles = result.total || window.appState.allArticlesForCurrentAccount.length;
-      window.appState.currentPage = 1; 
-      applySearchAndSort(); 
-      renderArticles(false); 
-      const message = result.message || 
-                     (result.newCount > 0 
-                       ? `同步完成：共 ${window.appState.articles.length} 篇文章（基于当前筛选），新增 ${result.newCount} 篇` 
-                       : `同步完成：共 ${window.appState.articles.length} 篇文章（基于当前筛选），无新增`);
-      window.domElements.progressInfo.textContent = message;
-      if (syncAllBtn) syncAllBtn.disabled = false;
-      window.domElements.loadMoreBtn.disabled = window.appState.articles.length >= window.appState.totalArticles;
-      if (result.newCount > 0) {
-        window.uiUtils.showToast(`同步完成！新增 ${result.newCount} 篇文章`);
-      } else {
-        window.uiUtils.showToast('同步完成！没有新文章');
-      }
+      window.appState.settings = settings;
+      window.domElements.settingsModal.style.display = 'none';
+      window.uiUtils.showToast('设置已保存');
+      updateLoginStatus();
     } else {
-      const errorMessage = result.message || '同步失败，请稍后再试';
-      window.domElements.progressInfo.textContent = errorMessage;
-      window.uiUtils.showToast(errorMessage);
-      if (syncAllBtn) syncAllBtn.disabled = false;
-      window.domElements.loadMoreBtn.disabled = false;
+      window.uiUtils.showToast(`保存设置失败: ${result.message}`);
     }
   } catch (error) {
-    console.error('全量同步失败:', error);
-    const errorMessage = error.message || '同步失败';
-    window.domElements.progressInfo.textContent = '同步失败: ' + errorMessage;
-    window.uiUtils.showToast('全量同步失败: ' + errorMessage);
-    const syncAllBtn = document.getElementById('btn-sync-all'); 
-    if (syncAllBtn) syncAllBtn.disabled = false;
-    window.domElements.loadMoreBtn.disabled = false;
-  } finally {
-    window.appState.isLoading = false;
+    console.error('保存设置失败:', error);
+    window.uiUtils.showToast('保存设置失败');
   }
 }
 
@@ -742,8 +303,8 @@ function setupEventListeners() {
     console.log('Article update:', data);
     if (window.appState.currentAccount && data.accountName === window.appState.currentAccount.name && data.action === 'add') {
       window.appState.allArticlesForCurrentAccount.unshift(data.article);
-      applySearchAndSort();
-      renderArticles(false);
+      window.articleManager.applySearchAndSort();
+      window.articleManager.renderArticles(false);
     }
   });
 }
@@ -795,8 +356,8 @@ async function switchAccount(accountName) {
 // 处理搜索输入事件
 function handleSearchInput(event) {
   window.appState.currentSearchTerm = event.target.value;
-  applySearchAndSort();
-  renderArticles(false); 
+  window.articleManager.applySearchAndSort();
+  window.articleManager.renderArticles(false); 
 }
 
 // 应用搜索和排序

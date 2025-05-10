@@ -160,7 +160,7 @@
     *   **目标文件:** `src/script/accountManager.js`
     *   **包含函数:** `loadAccounts`, `renderAccountsList`, `selectAccount`, `switchAccount`, `addAccount`, `editAccount`, `deleteAccount`, `searchAccount`。
     *   **依赖:** `window.appState`, `window.domElements`, `window.uiUtils.showToast`。
-    *   **状态:** `待办`
+    *   **状态:** `已完成`
 
 *   **阶段四: 文章管理 (`articleManager.js`)**
     *   **目标文件:** `src/script/articleManager.js`

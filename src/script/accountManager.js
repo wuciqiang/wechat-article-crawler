@@ -174,9 +174,9 @@ window.accountManager.selectAccount = function(account) {
   window.domElements.articlesData.innerHTML = '';
   
   if (account.fakeid) {
-    loadArticles(account); // This function is still in renderer.js for now
+    window.articleManager.loadArticles(account);
   } else {
-    window.accountManager.searchAccount(account); // Internal call
+    window.accountManager.searchAccount(account);
   }
 };
 
@@ -190,7 +190,7 @@ window.accountManager.searchAccount = async function(account) {
     if (result.success) {
       account.fakeid = result.fakeid;
       await window.api.saveAccount(account);
-      loadArticles(account); // This function is still in renderer.js for now
+      window.articleManager.loadArticles(account);
     } else {
       window.domElements.progressInfo.textContent = result.message;
       window.uiUtils.showToast(result.message);
@@ -292,29 +292,15 @@ window.accountManager.switchAccount = async function(accountName) {
     }
     window.appState.currentAccount = window.appState.accounts.find(a => a.name === accountName);
 
-    // Assuming loadArticles will be moved to articleManager or similar later
-    // For now, direct call as it's still in renderer.js
-    // If currentAccount is found, call loadArticles
     if (window.appState.currentAccount) {
         if (window.appState.currentAccount.fakeid) {
-            loadArticles(window.appState.currentAccount); // This function is still in renderer.js for now
+            window.articleManager.loadArticles(window.appState.currentAccount);
         } else {
-            window.accountManager.searchAccount(window.appState.currentAccount); // Internal call to get fakeid then loadArticles
+            window.accountManager.searchAccount(window.appState.currentAccount);
         }
     } else {
         window.uiUtils.showToast('未能找到账号: ' + accountName);
     }
-
-    // Original problematic getArticles call is removed as selectAccount already handles loading logic.
-    // The selectAccount logic (which calls loadArticles or searchAccount) should be sufficient if currentAccount is set.
-    // The primary goal of switchAccount should be to set the currentAccount and trigger the standard selection flow.
-    // A more direct way would be to find the account and then call selectAccount.
-    // const accountToSelect = window.appState.accounts.find(a => a.name === accountName);
-    // if (accountToSelect) {
-    //   window.accountManager.selectAccount(accountToSelect);
-    // } else {
-    //   window.uiUtils.showToast('未能找到账号: ' + accountName);
-    // }
 
   } catch (error) {
     console.error('切换账号失败:', error);
