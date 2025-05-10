@@ -2,7 +2,8 @@
 const state = {
   accounts: [],
   currentAccount: null,
-  articles: [],
+  allArticlesForCurrentAccount: [], // Stores all articles for the current account, unfiltered
+  articles: [], // Stores articles to be displayed (can be filtered/sorted)
   currentPage: 0,
   totalArticles: 0,
   isLoading: false,
@@ -13,7 +14,8 @@ const state = {
     loggedIn: false,
     lastLogin: null
   },
-  sortOrder: 'desc' // 默认为降序（新→旧）
+  sortOrder: 'desc', // 默认为降序（新→旧）
+  currentSearchTerm: '', // Stores the current search term
 };
 
 // 格式化日期时间戳
@@ -74,6 +76,9 @@ const closeLoginPrompt = document.querySelector('.close-login-prompt');
 const btnCancelLogin = document.getElementById('btn-cancel-login');
 const btnConfirmLogin = document.getElementById('btn-confirm-login');
 
+// 搜索相关元素
+const searchArticlesInput = document.getElementById('search-articles-input');
+
 // 初始化应用
 async function initApp() {
   // 设置排序下拉框的初始值
@@ -93,6 +98,11 @@ async function initApp() {
   
   // 设置登录事件监听
   setupLoginListeners();
+  
+  // 绑定搜索框事件
+  if (searchArticlesInput) {
+    searchArticlesInput.addEventListener('input', handleSearchInput);
+  }
 }
 
 // 加载设置
@@ -326,7 +336,10 @@ function selectAccount(account) {
 
   state.currentAccount = account;
   state.articles = [];
+  state.allArticlesForCurrentAccount = [];
   state.currentPage = 0;
+  state.currentSearchTerm = '';
+  if(searchArticlesInput) searchArticlesInput.value = '';
   
   // 更新UI
   currentAccountName.textContent = account.name;
@@ -405,12 +418,12 @@ async function loadArticles(account, page = 1) {
         const progress = syncResult.success ? syncResult.progress : { total: 0, synced: 0, lastSync: null };
         
         // 更新状态
-        state.articles = localResult.articles;
+        state.allArticlesForCurrentAccount = localResult.articles;
         state.totalArticles = progress.total || localResult.articles.length;
         state.currentPage = 1;
         
-        // 应用排序
-        sortArticles();
+        // 应用搜索和排序 (初始加载时搜索词为空)
+        applySearchAndSort();
         
         // 更新UI
         renderArticles(false);
@@ -444,20 +457,20 @@ async function loadArticles(account, page = 1) {
     
     if (result.success) {
       // 更新状态
+      let newRawArticles = result.articles;
       if (page > 1) {
-        state.articles = [...state.articles, ...result.articles];
+        state.allArticlesForCurrentAccount = [...state.allArticlesForCurrentAccount, ...newRawArticles];
       } else {
-        state.articles = result.articles;
+        state.allArticlesForCurrentAccount = newRawArticles;
       }
-      
-      // 应用排序
-      sortArticles();
       
       state.totalArticles = result.total;
       state.currentPage = page;
       
+      applySearchAndSort();
+      
       // 更新UI
-      renderArticles(page > 1);
+      renderArticles(page > 1 && state.currentSearchTerm.trim() === '');
       
       // 更新进度信息
       progressInfo.textContent = `已获取 ${state.articles.length}/${state.totalArticles} 篇文章`;
@@ -490,7 +503,11 @@ function renderArticles(append = false) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
     td.colSpan = 4;
-    td.textContent = '暂无文章';
+    if (state.currentSearchTerm && state.currentSearchTerm.trim() !== '') {
+      td.textContent = '无对应文章，请尝试其他关键字';
+    } else {
+      td.textContent = '暂无文章';
+    }
     td.style.textAlign = 'center';
     td.style.padding = '20px';
     tr.appendChild(td);
@@ -1086,21 +1103,10 @@ function showToast(message) {
 
 // 排序文章列表 - 根据创建时间
 function sortArticles() {
-  if (!state.articles || state.articles.length === 0) return;
+  if (!state.allArticlesForCurrentAccount || state.allArticlesForCurrentAccount.length === 0) return;
   
-  // 按照创建时间排序
-  state.articles.sort((a, b) => {
-    // 先确保create_time字段存在
-    const timeA = a.create_time || 0;
-    const timeB = b.create_time || 0;
-    
-    // 根据排序方式进行排序
-    if (state.sortOrder === 'desc') {
-      return timeB - timeA; // 降序：新→旧
-    } else {
-      return timeA - timeB; // 升序：旧→新
-    }
-  });
+  // state.sortOrder 已经在事件监听中更新
+  applySearchAndSort();
   
   // 重新渲染文章列表
   renderArticles(false);
@@ -1274,68 +1280,38 @@ async function syncAllArticles() {
     progressInfo.textContent = '正在同步文章...';
     
     // 获取最新文章的创建时间，用于增量同步
-    let latestArticleTime = 0;
-    if (state.articles && state.articles.length > 0) {
-      // 假设文章已经按照create_time降序排列
-      if (state.sortOrder === 'desc') {
-        latestArticleTime = state.articles[0].create_time;
-      } else {
-        // 如果是升序，则查找最大的create_time
-        latestArticleTime = Math.max(...state.articles.map(a => a.create_time || 0));
-      }
-    }
+    // let latestArticleTime = 0; // 注释掉，因为全量同步不依赖这个
+    // if (state.allArticlesForCurrentAccount && state.allArticlesForCurrentAccount.length > 0) {
+    //   const sortedFullList = [...state.allArticlesForCurrentAccount].sort((a,b) => (b.create_time || 0) - (a.create_time || 0));
+    //   latestArticleTime = sortedFullList[0].create_time;
+    // }
     
     const params = {
       accountName: state.currentAccount.name,
       fakeid: state.currentAccount.fakeid,
       syncAll: true,
-      lastSyncTime: latestArticleTime // 传递上次同步时间，用于增量同步
+      // lastSyncTime: latestArticleTime // 全量同步，不传递 lastSyncTime
     };
     
     // 获取同步进度
-    const currentArticleCount = state.articles.length;
+    // const currentArticleCount = state.allArticlesForCurrentAccount.length; // 注释或调整
     
     const result = await window.api.getArticles(params);
     
     if (result.success) {
-      // 计算新增文章数量
-      const newArticles = [];
-      
-      // 有些情况下后端可能直接返回处理好的文章列表和新增数量
-      if (result.newCount !== undefined && Array.isArray(result.articles)) {
-        // 使用后端返回的文章数据和新增数量
-        if (result.newCount > 0) {
-          // 过滤出真正的新文章（通过对比ID或链接）
-          const existingArticleIds = new Set(state.articles.map(a => a.aid || a.link));
-          
-          for (const article of result.articles) {
-            const articleId = article.aid || article.link;
-            if (articleId && !existingArticleIds.has(articleId)) {
-              newArticles.push(article);
-            }
-          }
-          
-          if (newArticles.length > 0) {
-            // 添加新文章到现有列表
-            state.articles = [...newArticles, ...state.articles];
-            
-            // 应用排序
-            sortArticles();
-            
-            // 重新渲染文章列表
-            renderArticles(false);
-          }
-        }
-        
-        // 更新总文章数量
-        state.totalArticles = result.total || state.articles.length;
-      }
-      
+      // 全量同步后，后端应返回完整的文章列表和总数
+      state.allArticlesForCurrentAccount = result.articles || [];
+      state.totalArticles = result.total || state.allArticlesForCurrentAccount.length;
+      state.currentPage = 1; // 重置页码，因为是全量数据
+
+      applySearchAndSort(); // 应用当前搜索（如果有）和排序
+      renderArticles(false); // 重新渲染
+
       // 更新同步进度信息
       const message = result.message || 
                      (result.newCount > 0 
-                       ? `同步完成：共 ${state.articles.length} 篇文章，新增 ${result.newCount} 篇` 
-                       : `同步完成：共 ${state.articles.length} 篇文章，无新增`);
+                       ? `同步完成：共 ${state.articles.length} 篇文章（基于当前筛选），新增 ${result.newCount} 篇` 
+                       : `同步完成：共 ${state.articles.length} 篇文章（基于当前筛选），无新增`);
       
       progressInfo.textContent = message;
       
@@ -1389,11 +1365,11 @@ function setupEventListeners() {
     console.log('Article update:', data);
     // 确保是当前公众号的文章更新
     if (state.currentAccount && data.accountName === state.currentAccount.name && data.action === 'add') {
-      // 将新文章添加到状态
-      state.articles.unshift(data.article);
+      // 将新文章添加到 state.allArticlesForCurrentAccount 的开头
+      state.allArticlesForCurrentAccount.unshift(data.article);
       
-      // 应用排序
-      sortArticles();
+      // 应用搜索和排序
+      applySearchAndSort();
       
       // 重新渲染文章列表
       renderArticles(false);
@@ -1448,4 +1424,33 @@ async function switchAccount(accountName) {
     console.error('切换账号失败:', error);
     showError('切换账号失败：' + error.message);
   }
+}
+
+// 处理搜索输入事件
+function handleSearchInput(event) {
+  state.currentSearchTerm = event.target.value;
+  applySearchAndSort();
+  renderArticles(false); // 重新渲染，非追加模式
+}
+
+// 应用搜索和排序
+function applySearchAndSort() {
+  let articlesToDisplay = [...state.allArticlesForCurrentAccount]; // 从完整列表开始
+
+  // 应用搜索过滤
+  if (state.currentSearchTerm && state.currentSearchTerm.trim() !== '') {
+    const searchTerm = state.currentSearchTerm.trim().toLowerCase();
+    articlesToDisplay = articlesToDisplay.filter(article => 
+      article.title && article.title.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  // 应用排序
+  if (state.sortOrder === 'desc') {
+    articlesToDisplay.sort((a, b) => (b.create_time || 0) - (a.create_time || 0));
+  } else {
+    articlesToDisplay.sort((a, b) => (a.create_time || 0) - (b.create_time || 0));
+  }
+
+  state.articles = articlesToDisplay;
 } 
