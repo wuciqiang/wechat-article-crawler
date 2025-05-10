@@ -187,6 +187,22 @@
     *   **目标文件:** `renderer.js` (重构后) 或 `src/script/appInit.js`
     *   **包含函数:** `initApp`, `bindEvents`, `setupEventListeners`, `init`。
     *   此文件将协调调用其他模块的函数。
-    *   **状态:** `待办`
+    *   **步骤:**
+        1.  审视当前 `renderer.js` 中剩余的函数：`initApp`, `bindEvents`, `setupEventListeners`, `init`。
+        2.  确定这些函数是否适合保留在 `renderer.js` 作为主协调文件，或者是否有必要将它们也移到一个新的 `appInit.js` 文件中。
+        3.  如果决定创建 `appInit.js`:
+            *   创建 `src/script/appInit.js` 文件。
+            *   将 `initApp`, `bindEvents`, `setupEventListeners`, `init` 函数定义从 `renderer.js` 剪切并粘贴到 `appInit.js`。
+            *   在 `appInit.js` 中，创建一个名为 `window.appInit` 的对象，并将这些函数作为其方法（或者，如果 `init` 是唯一的入口点，则只暴露 `window.appInit.init`）。
+            *   在 `renderer.js` 中，如果它还存在并且需要调用初始化，则调用 `window.appInit.init()`。或者，如果 `renderer.js` 变成一个空文件或仅包含注释，可以考虑在 `index.html` 中直接引入并调用 `appInit.js` 中的初始化函数。
+            *   更新 `index.html`，在所有其他脚本之后、但在需要启动应用的地方，引入 `src/script/appInit.js`。
+        4.  如果决定保留在 `renderer.js`:
+            *   确保 `renderer.js` 中对其他模块（`state`, `domElements`, `uiUtils`, `accountManager`, `articleManager`, `settingsManager`）的调用都是通过它们各自的 `window.object.method()` 方式。
+            *   确保 `init` 函数是最终的启动点。
+        5.  最终测试:
+            *   全面测试整个应用程序的所有功能，确保从启动到各项操作均无缝衔接，所有模块协同工作正常。
+            *   特别关注应用启动流程、事件绑定是否都按预期工作。
+            *   检查控制台有无任何错误。
+    *   **状态:** `已完成`
 
 ---
