@@ -63,155 +63,14 @@ async function initApp() {
   console.log("window.appState:", window.appState);
   console.log("window.domElements:", window.domElements);
   window.domElements.sortOrderSelect.value = window.appState.sortOrder;
-  await loadSettings();
-  updateLoginStatus();
+  await window.settingsManager.loadSettings();
+  window.settingsManager.updateLoginStatus();
   await window.accountManager.loadAccounts();
   bindEvents();
-  setupLoginListeners();
+  window.settingsManager.setupLoginListeners();
   if (window.domElements.searchArticlesInput) {
     window.domElements.searchArticlesInput.addEventListener('input', window.articleManager.handleSearchInput);
   }
-}
-
-// 加载设置
-async function loadSettings() {
-  console.log("loadSettings called"); 
-  try {
-    console.log("Attempting to call window.api.getSettings"); 
-    const settings = await window.api.getSettings();
-    console.log("Settings received:", settings); 
-    window.appState.settings = settings;
-    
-    // 更新设置表单
-    window.domElements.cookieInput.value = settings.cookie || '';
-    window.domElements.tokenInput.value = settings.token || '';
-    window.domElements.fingerprintInput.value = settings.fingerprint || '';
-    
-    // 更新登录状态
-    updateLoginStatus();
-  } catch (error) {
-    console.error('加载设置失败:', error);
-    window.uiUtils.showToast('加载设置失败');
-  }
-}
-
-// 更新登录状态显示
-function updateLoginStatus() {
-  const isLoggedIn = window.appState.settings.loggedIn === true && 
-                  window.appState.settings.cookie && 
-                  window.appState.settings.token;
-  
-  // 更新界面显示
-  if (isLoggedIn) {
-    window.domElements.loginStatusText.textContent = '已登录';
-    window.domElements.loginStatusText.className = 'logged-in';
-    window.domElements.btnLogin.style.display = 'none';
-    window.domElements.btnLogout.style.display = 'inline-block';
-    
-    window.domElements.settingsLoginStatus.textContent = '已登录';
-    window.domElements.settingsLoginStatus.className = 'logged-in';
-    
-    // 显示上次登录时间
-    if (window.appState.settings.lastLogin) {
-      const lastLogin = new Date(window.appState.settings.lastLogin);
-      window.domElements.lastLoginTime.textContent = lastLogin.toLocaleString('zh-CN');
-      window.domElements.loginTimeContainer.style.display = 'block';
-    }
-  } else {
-    window.domElements.loginStatusText.textContent = '未登录';
-    window.domElements.loginStatusText.className = 'not-logged-in';
-    window.domElements.btnLogin.style.display = 'inline-block';
-    window.domElements.btnLogout.style.display = 'none';
-    
-    window.domElements.settingsLoginStatus.textContent = '未登录';
-    window.domElements.settingsLoginStatus.className = 'not-logged-in';
-    window.domElements.loginTimeContainer.style.display = 'none';
-  }
-}
-
-// 验证设置是否完整
-function validateSettings() {
-  if (window.appState.settings.loggedIn && window.appState.settings.cookie && window.appState.settings.token) {
-    return true;
-  }
-  if (window.appState.settings.cookie && window.appState.settings.token) {
-    return true;
-  }
-  showLoginPrompt();
-  return false;
-}
-
-// 显示登录提示弹窗
-function showLoginPrompt() {
-  window.domElements.loginPromptModal.style.display = 'block';
-}
-
-// 关闭登录提示弹窗
-function closeLoginPromptModal() {
-  window.domElements.loginPromptModal.style.display = 'none';
-}
-
-// 打开登录窗口
-async function openLoginWindow() {
-  try {
-    closeLoginPromptModal();
-    window.uiUtils.showToast('正在打开登录窗口...');
-    const result = await window.api.openLoginWindow();
-    if (result.success) {
-      if (result.loggedIn) {
-        await loadSettings();
-        window.uiUtils.showToast('登录成功');
-      } else {
-        window.uiUtils.showToast('登录窗口已关闭，未检测到登录');
-      }
-    } else {
-      window.uiUtils.showToast(`打开登录窗口失败: ${result.message}`);
-    }
-  } catch (error) {
-    console.error('打开登录窗口失败:', error);
-    window.uiUtils.showToast('打开登录窗口失败');
-  }
-}
-
-// 登出
-async function logout() {
-  try {
-    const result = await window.api.logout();
-    if (result.success) {
-      await loadSettings();
-      window.uiUtils.showToast('已退出登录');
-    } else {
-      window.uiUtils.showToast(`登出失败: ${result.message}`);
-    }
-  } catch (error) {
-    console.error('登出失败:', error);
-    window.uiUtils.showToast('登出失败');
-  }
-}
-
-// 设置登录事件监听
-function setupLoginListeners() {
-  window.domElements.btnLogin.addEventListener('click', openLoginWindow);
-  window.domElements.btnLogout.addEventListener('click', logout);
-  window.domElements.btnOpenLogin.addEventListener('click', openLoginWindow);
-  window.domElements.closeLoginPrompt.addEventListener('click', closeLoginPromptModal);
-  window.domElements.btnCancelLogin.addEventListener('click', closeLoginPromptModal);
-  window.domElements.btnConfirmLogin.addEventListener('click', openLoginWindow);
-  
-  window.api.onLoginSuccess((settings) => {
-    window.appState.settings = settings;
-    updateLoginStatus();
-    window.uiUtils.showToast('登录成功，已自动获取参数');
-    window.domElements.cookieInput.value = settings.cookie || '';
-    window.domElements.tokenInput.value = settings.token || '';
-    window.domElements.fingerprintInput.value = settings.fingerprint || '';
-  });
-  
-  window.addEventListener('click', (e) => {
-    if (e.target === window.domElements.loginPromptModal) {
-      closeLoginPromptModal();
-    }
-  });
 }
 
 // 绑定事件
@@ -260,34 +119,9 @@ function bindEvents() {
     }
   });
   
-  window.domElements.saveSettingsBtn.addEventListener('click', saveSettings);
+  window.domElements.saveSettingsBtn.addEventListener('click', window.settingsManager.saveSettings);
   window.domElements.exportBtn.addEventListener('click', window.articleManager.exportArticles);
   window.uiUtils.setupTableColumnResize();
-}
-
-// 保存设置
-async function saveSettings() {
-  try {
-    const settings = {
-      cookie: window.domElements.cookieInput.value.trim(),
-      token: window.domElements.tokenInput.value.trim(),
-      fingerprint: window.domElements.fingerprintInput.value.trim(),
-      loggedIn: window.appState.settings.loggedIn,
-      lastLogin: window.appState.settings.lastLogin
-    };
-    const result = await window.api.saveSettings(settings);
-    if (result.success) {
-      window.appState.settings = settings;
-      window.domElements.settingsModal.style.display = 'none';
-      window.uiUtils.showToast('设置已保存');
-      updateLoginStatus();
-    } else {
-      window.uiUtils.showToast(`保存设置失败: ${result.message}`);
-    }
-  } catch (error) {
-    console.error('保存设置失败:', error);
-    window.uiUtils.showToast('保存设置失败');
-  }
 }
 
 // 设置事件监听

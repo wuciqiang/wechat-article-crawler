@@ -182,7 +182,7 @@ window.accountManager.selectAccount = function(account) {
 
 // 搜索公众号获取fakeid
 window.accountManager.searchAccount = async function(account) {
-  if (!validateSettings()) return; // This function is still in renderer.js for now
+  if (!window.settingsManager.validateSettings()) return;
   
   try {
     window.domElements.progressInfo.textContent = '正在搜索公众号...';

@@ -166,12 +166,21 @@
     *   **目标文件:** `src/script/articleManager.js`
     *   **包含函数:** `loadArticles`, `renderArticles`, `showArticleDetail`, `backToList`, `refreshArticles`, `loadMoreArticles`, `exportArticles`, `sortArticles`, `handleSearchInput`, `applySearchAndSort`, `addSyncAllButton`, `syncAllArticles`。
     *   **依赖:** `window.appState`, `window.domElements`, `window.uiUtils`, `window.api`。
-    *   **状态:** `待办`
+    *   **状态:** `已完成`
 
 *   **阶段五: 设置与登录管理 (`settingsManager.js`)**
     *   **目标文件:** `src/script/settingsManager.js`
     *   **包含函数:** `loadSettings`, `saveSettings`, `updateLoginStatus`, `validateSettings`, `showLoginPrompt`, `closeLoginPromptModal`, `openLoginWindow`, `logout`, `setupLoginListeners`。
     *   **依赖:** `window.appState`, `window.domElements`, `window.uiUtils.showToast`, `window.api`。
+    *   **步骤:**
+        1.  创建 `src/script/settingsManager.js` 文件。
+        2.  将 `renderer.js` 中的 `loadSettings`, `saveSettings`, `updateLoginStatus`, `validateSettings`, `showLoginPrompt`, `closeLoginPromptModal`, `openLoginWindow`, `logout`, `setupLoginListeners` 函数定义剪切并粘贴到 `settingsManager.js`。
+        3.  在 `settingsManager.js` 中，创建一个名为 `window.settingsManager` 的对象，并将这些函数作为其方法。
+        4.  在 `renderer.js` 中，将对这些函数的调用相应修改 (例如，`loadSettings()` 改为 `window.settingsManager.loadSettings()`)。
+        5.  在 `accountManager.js` 和 `articleManager.js` 中，将对 `validateSettings()` 的调用修改为 `window.settingsManager.validateSettings()`。
+        6.  确保 `setupLoginListeners` 中对 `window.api.onLoginSuccess` 的回调正确处理或能访问到必要的 `window.settingsManager` 方法。
+        7.  在 `index.html` 中，在 `renderer.js` 之前（但在 `articleManager.js` 之后）引入 `src/script/settingsManager.js`。
+        8.  测试所有与设置保存/加载、登录状态更新、登录/登出流程、登录提示弹窗相关的功能。
     *   **状态:** `待办`
 
 *   **阶段六: 应用初始化与主逻辑 (`appInit.js` 或重构后的 `renderer.js`)**
@@ -180,4 +189,4 @@
     *   此文件将协调调用其他模块的函数。
     *   **状态:** `待办`
 
---- 
+---

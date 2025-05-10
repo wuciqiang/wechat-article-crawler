@@ -2,8 +2,7 @@ window.articleManager = {};
 
 // 加载文章列表
 window.articleManager.loadArticles = async function(account, page = 1) {
-  // Validate settings function might be in settingsManager later, or globally available
-  if (!validateSettings()) return; 
+  if (!window.settingsManager.validateSettings()) return;
   if (!account.fakeid) {
     // searchAccount is in accountManager
     window.accountManager.searchAccount(account);
