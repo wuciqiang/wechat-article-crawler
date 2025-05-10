@@ -1,3 +1,10 @@
+// All functionality from renderer.js has been modularized and moved to files
+// under src/script/ (e.g., state.js, domElements.js, uiUtils.js, 
+// accountManager.js, articleManager.js, settingsManager.js, and appInit.js).
+// The application is now initialized by appInit.js.
+// This file (renderer.js) is no longer in active use and can be removed from index.html
+// or deleted from the project after confirming a successful transition.
+
 // 全局状态管理
 // const state = { ... }; //  <- 此整个代码块将被删除 (任务 1.1.4)
 // ... (直到 state 定义结束)

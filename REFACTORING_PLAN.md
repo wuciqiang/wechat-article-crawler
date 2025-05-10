@@ -181,7 +181,7 @@
         6.  确保 `setupLoginListeners` 中对 `window.api.onLoginSuccess` 的回调正确处理或能访问到必要的 `window.settingsManager` 方法。
         7.  在 `index.html` 中，在 `renderer.js` 之前（但在 `articleManager.js` 之后）引入 `src/script/settingsManager.js`。
         8.  测试所有与设置保存/加载、登录状态更新、登录/登出流程、登录提示弹窗相关的功能。
-    *   **状态:** `待办`
+    *   **状态:** `已完成`
 
 *   **阶段六: 应用初始化与主逻辑 (`appInit.js` 或重构后的 `renderer.js`)**
     *   **目标文件:** `renderer.js` (重构后) 或 `src/script/appInit.js`
