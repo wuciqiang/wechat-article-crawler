@@ -58,25 +58,16 @@
 
 // 初始化应用
 async function initApp() {
-  // 设置排序下拉框的初始值
+  console.log("initApp called");
+  console.log("window.api:", window.api);
+  console.log("window.appState:", window.appState);
+  console.log("window.domElements:", window.domElements);
   window.domElements.sortOrderSelect.value = window.appState.sortOrder;
-  
-  // 加载设置
   await loadSettings();
-  
-  // 更新登录状态显示
   updateLoginStatus();
-  
-  // 加载公众号列表
-  await loadAccounts();
-  
-  // 绑定事件
+  await window.accountManager.loadAccounts();
   bindEvents();
-  
-  // 设置登录事件监听
   setupLoginListeners();
-  
-  // 绑定搜索框事件
   if (window.domElements.searchArticlesInput) {
     window.domElements.searchArticlesInput.addEventListener('input', handleSearchInput);
   }
@@ -135,231 +126,6 @@ function updateLoginStatus() {
     window.domElements.settingsLoginStatus.textContent = '未登录';
     window.domElements.settingsLoginStatus.className = 'not-logged-in';
     window.domElements.loginTimeContainer.style.display = 'none';
-  }
-}
-
-// 加载公众号列表
-async function loadAccounts() {
-  try {
-    const accounts = await window.api.getAccounts();
-    window.appState.accounts = accounts;
-    
-    // 更新界面
-    renderAccountsList();
-  } catch (error) {
-    console.error('加载公众号列表失败:', error);
-    window.uiUtils.showToast('加载公众号列表失败');
-  }
-}
-
-// 渲染公众号列表
-function renderAccountsList() {
-  window.domElements.accountsList.innerHTML = '';
-  
-  if (window.appState.accounts.length === 0) {
-    const emptyItem = document.createElement('li');
-    emptyItem.textContent = '暂无公众号，请添加';
-    emptyItem.style.color = '#999';
-    window.domElements.accountsList.appendChild(emptyItem);
-    return;
-  }
-  
-  window.appState.accounts.forEach(account => {
-    const li = document.createElement('li');
-    li.setAttribute('data-name', account.name);
-    
-    // 添加基础样式
-    li.style.cssText = `
-      background: #f8f9fa;
-      border: 1px solid #e9ecef;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      padding: 12px 15px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    `;
-    
-    // 添加悬停效果
-    li.addEventListener('mouseover', () => {
-      if (!li.classList.contains('active')) {
-        li.style.background = '#e9ecef';
-        li.style.transform = 'translateY(-1px)';
-        li.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-      }
-    });
-    
-    li.addEventListener('mouseout', () => {
-      if (!li.classList.contains('active')) {
-        li.style.background = '#f8f9fa';
-        li.style.transform = 'translateY(0)';
-        li.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-      }
-    });
-    
-    // 清除其他按钮的选中效果
-    if (window.appState.currentAccount && window.appState.currentAccount.name === account.name) {
-      // 先清除所有按钮的选中效果
-      const allItems = window.domElements.accountsList.querySelectorAll('li');
-      allItems.forEach(item => {
-        item.classList.remove('active');
-        item.style.background = '#f8f9fa';
-        item.style.borderColor = '#e9ecef';
-        item.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-      });
-      
-      // 设置当前按钮的选中效果
-      li.classList.add('active');
-      li.style.background = '#e3f2fd';
-      li.style.borderColor = '#90caf9';
-      li.style.boxShadow = '0 2px 8px rgba(33,150,243,0.2)';
-    }
-    
-    // 创建公众号名称和进度容器
-    const accountInfo = document.createElement('div');
-    accountInfo.className = 'account-info';
-    accountInfo.textContent = account.name;
-    accountInfo.style.cssText = `
-      font-size: 14px;
-      font-weight: 500;
-      color: #2c3e50;
-    `;
-    
-    // 创建操作按钮容器
-    const actions = document.createElement('div');
-    actions.className = 'account-actions';
-    actions.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    `;
-    
-    // 删除按钮
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.textContent = '删除';
-    deleteBtn.style.cssText = `
-      background: #ffebee;
-      color: #d32f2f;
-      border: none;
-      padding: 4px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.2s ease;
-    `;
-    
-    // 添加删除按钮悬停效果
-    deleteBtn.addEventListener('mouseover', () => {
-      deleteBtn.style.background = '#ffcdd2';
-    });
-    
-    deleteBtn.addEventListener('mouseout', () => {
-      deleteBtn.style.background = '#ffebee';
-    });
-    
-    deleteBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteAccount(account.name);
-    });
-    
-    // 添加删除按钮到操作容器
-    actions.appendChild(deleteBtn);
-    
-    // 添加所有元素到列表项
-    li.appendChild(accountInfo);
-    li.appendChild(actions);
-    
-    // 点击公众号选择它
-    li.addEventListener('click', () => {
-      // 清除所有按钮的选中效果
-      const allItems = window.domElements.accountsList.querySelectorAll('li');
-      allItems.forEach(item => {
-        item.classList.remove('active');
-        item.style.background = '#f8f9fa';
-        item.style.borderColor = '#e9ecef';
-        item.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-      });
-      
-      // 设置当前按钮的选中效果
-      li.classList.add('active');
-      li.style.background = '#e3f2fd';
-      li.style.borderColor = '#90caf9';
-      li.style.boxShadow = '0 2px 8px rgba(33,150,243,0.2)';
-      
-      // 选择公众号
-      selectAccount(account);
-    });
-    
-    window.domElements.accountsList.appendChild(li);
-  });
-}
-
-// 选择公众号
-function selectAccount(account) {
-  if (window.domElements.articleDetailView && window.domElements.articlesView) {
-    window.domElements.articleDetailView.style.display = 'none';
-    window.domElements.articlesView.style.display = 'flex';
-  }
-
-  const articlesList = document.getElementById('articles-list'); 
-  if (articlesList) {
-    articlesList.innerHTML = '';
-  }
-
-  window.appState.currentAccount = account;
-  window.appState.articles = [];
-  window.appState.allArticlesForCurrentAccount = [];
-  window.appState.currentPage = 0;
-  window.appState.currentSearchTerm = '';
-  if(window.domElements.searchArticlesInput) window.domElements.searchArticlesInput.value = '';
-  
-  window.domElements.currentAccountName.textContent = account.name;
-  window.domElements.progressInfo.textContent = '未开始获取';
-  window.domElements.loadMoreBtn.disabled = true;
-  
-  const items = window.domElements.accountsList.querySelectorAll('li');
-  items.forEach(item => {
-    if (item.getAttribute('data-name') === account.name) {
-      item.classList.add('active');
-    } else {
-      item.classList.remove('active');
-    }
-  });
-  
-  window.domElements.articlesData.innerHTML = '';
-  
-  if (account.fakeid) {
-    loadArticles(account);
-  } else {
-    searchAccount(account);
-  }
-}
-
-// 搜索公众号获取fakeid
-async function searchAccount(account) {
-  if (!validateSettings()) return;
-  
-  try {
-    window.domElements.progressInfo.textContent = '正在搜索公众号...';
-    
-    const result = await window.api.searchAccount(account.name);
-    
-    if (result.success) {
-      account.fakeid = result.fakeid;
-      await window.api.saveAccount(account);
-      loadArticles(account);
-    } else {
-      window.domElements.progressInfo.textContent = result.message;
-      window.uiUtils.showToast(result.message);
-    }
-  } catch (error) {
-    console.error('搜索公众号失败:', error);
-    window.domElements.progressInfo.textContent = '搜索失败';
-    window.uiUtils.showToast('搜索公众号失败');
   }
 }
 
@@ -678,91 +444,6 @@ function backToList() {
   window.domElements.errorContainer.style.display = 'none';
 }
 
-// 添加公众号
-async function addAccount(name) {
-  if (!name) {
-    window.uiUtils.showToast('请输入公众号名称');
-    return;
-  }
-  
-  const exists = window.appState.accounts.find(account => account.name === name);
-  if (exists) {
-    window.uiUtils.showToast('该公众号已存在');
-    return;
-  }
-  
-  const account = { name, fakeid: null };
-  
-  try {
-    const accounts = await window.api.saveAccount(account);
-    window.appState.accounts = accounts;
-    renderAccountsList();
-    window.domElements.accountNameInput.value = '';
-    selectAccount(account);
-  } catch (error) {
-    console.error('添加公众号失败:', error);
-    window.uiUtils.showToast('添加公众号失败');
-  }
-}
-
-// 编辑公众号
-function editAccount(account) {
-  const newName = prompt('请输入新的公众号名称:', account.name);
-  
-  if (!newName || newName === account.name) return;
-  
-  const exists = window.appState.accounts.find(a => a.name === newName && a.name !== account.name);
-  if (exists) {
-    window.uiUtils.showToast('该公众号名称已存在');
-    return;
-  }
-  
-  const updatedAccount = { ...account, name: newName };
-  
-  window.api.saveAccount(updatedAccount)
-    .then(accounts => {
-      window.appState.accounts = accounts;
-      if (window.appState.currentAccount && window.appState.currentAccount.name === account.name) {
-        window.appState.currentAccount = updatedAccount;
-        window.domElements.currentAccountName.textContent = newName;
-      }
-      renderAccountsList();
-    })
-    .catch(error => {
-      console.error('编辑公众号失败:', error);
-      window.uiUtils.showToast('编辑公众号失败');
-    });
-}
-
-// 删除公众号
-async function deleteAccount(accountName) {
-  if (!confirm(`确定要删除公众号"${accountName}"吗？`)) {
-    return;
-  }
-  
-  try {
-    const result = await window.api.deleteAccount(accountName);
-    if (result.success) {
-      window.appState.accounts = result.accounts;
-      if (window.appState.currentAccount && window.appState.currentAccount.name === accountName) {
-        window.appState.currentAccount = null;
-        window.appState.articles = [];
-        window.domElements.currentAccountName.textContent = '请选择公众号';
-        window.domElements.progressInfo.textContent = '未开始获取';
-        window.domElements.articlesData.innerHTML = '';
-        window.domElements.loadMoreBtn.disabled = true;
-      }
-      renderAccountsList();
-      window.uiUtils.showToast(result.message);
-    } else {
-      window.uiUtils.showToast(result.message);
-    }
-  } catch (error) {
-    console.error('删除公众号失败:', error);
-    window.uiUtils.showToast('删除公众号失败');
-  }
-}
-
 // 刷新文章
 function refreshArticles(account) {
   if (!account) return;
@@ -928,13 +609,13 @@ function sortArticles() {
 function bindEvents() {
   window.domElements.addAccountBtn.addEventListener('click', () => {
     if (window.domElements.accountNameInput.value.trim()) {
-      addAccount(window.domElements.accountNameInput.value.trim());
+      window.accountManager.addAccount(window.domElements.accountNameInput.value.trim());
     }
   });
   
   window.domElements.accountNameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && window.domElements.accountNameInput.value.trim()) {
-      addAccount(window.domElements.accountNameInput.value.trim());
+      window.accountManager.addAccount(window.domElements.accountNameInput.value.trim());
     }
   });
   
