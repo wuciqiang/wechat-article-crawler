@@ -77,14 +77,12 @@ npm run build
 - electron-store: 本地存储
 - exceljs: Excel文件生成
 
-## 在线屏幕检测工具推荐
-https://screensizechecker.com/
-
 ## 免责声明
-
 本工具仅用于学习研究，请勿用于非法用途。使用本工具时请遵守相关法律法规，注意采集频率，避免对目标服务器造成影响。
 
 友情链接：
 https://screensizechecker.com/  screen size checker
+
 https://thesitemath.com/  Free Construction Calculators
+
 https://localresizer.com/ A focused static-image toolset
