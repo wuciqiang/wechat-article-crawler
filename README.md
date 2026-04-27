@@ -85,3 +85,4 @@ npm run build
 - https://screensizechecker.com/  screen size checker
 - https://thesitemath.com/  Free Construction Calculators
 - https://localresizer.com/ A focused static-image toolset
+- https://myfatcalc.com/ Free Body Fat Calculator
