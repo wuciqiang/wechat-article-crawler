@@ -86,3 +86,4 @@ npm run build
 - https://thesitemath.com/  Free Construction Calculators
 - https://localresizer.com/ A focused static-image toolset
 - https://myfatcalc.com/ Free Body Fat Calculator
+- https://aikitchenpreview.com/  AI Kitchen Preview
